@@ -40,8 +40,16 @@ The performance, thread-safety, and message-routing integrity of this distribute
 
 ## System Design Constraints & Known Limitations
 
-During the system integration and verification phase, the following architectural design constraint was isolated and documented:
+Full Protocol handshake (Login, Join, Report, Logout).
 
-* **Static Client-Server Binding (Single-User Session Limitation):** The connection handshake and session lifecycle between the C++ client and the Java server operate on a rigid, static implementation. The system is designed to accept and process a single user/client instance strictly once per execution cycle.
-* **The Boundary Behavior:** If the connected user disconnects or a secondary user attempts to establish a concurrent or subsequent session, the server-client binding remains statically locked to the initial instance, requiring a manual process restart to clear the network sockets and re-initialize the state.
-* **Engineering Trade-off:** This rigid behavior was kept as a project baseline constraint due to tight academic semester deadlines, shifting development focus entirely toward verifying core frame parsing correctness and basic protocol compliance rather than building a dynamically scalable multi-session lifecycle manager.
+JSON Data parsing and event injection.
+
+Memory and Channel isolation between different users.
+
+Known Limitations (The Broken Pipe Case):
+
+Issue: Intermittent Broken pipe error during rapid sequential Login -> Logout -> Login cycles.
+
+Technical Cause: Incomplete Socket teardown/re-initialization in the client-side lifecycle management upon re-connection.
+
+Conclusion: The current system handles single-session lifecycle perfectly, and this is a known architectural bottleneck identified for future refinement.
