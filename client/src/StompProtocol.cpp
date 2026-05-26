@@ -1,0 +1,361 @@
+#include "StompProtocol.h"
+#include "event.h"
+// #include <event.h>
+#include <fstream>
+
+StompProtocol::StompProtocol() : stop(false), IsConnected(false), loggedIn(false), NextSubId(1), NextReceiptId(1), host(), port(0), username(), gameToSubId(), receiptActions(), game_events(), m()
+
+{
+}
+
+// server
+void StompProtocol::handleServerFrame(const std::string &frame)
+{
+    std::vector<std::string> vec = split_lines(frame, '\n');
+    // for (std::string st : vec)
+    // { //to debug
+    //     std::cout << st << std::endl;
+    // }
+    if (vec.empty())
+        return;
+    std::string received = vec.at(0);
+    if (received == "CONNECTED")
+    {
+        std::cout << "Login successful" << std::endl;
+        IsConnected = true;
+        loggedIn = true;
+    }
+    else if (received == "RECEIPT")
+    {
+        std::vector<std::string> recId = split_lines(vec.at(1), ':');
+        int receipt = toInt(recId.at(1));
+        std::string getAction = receiptActions[receipt]; // get the action by receipt id
+        if (getAction == "logout")
+        {
+            stop = true;
+            IsConnected = false;
+            loggedIn = false;
+            NextSubId = 1;
+            NextReceiptId = 1;
+            host.clear();
+            port = 0;
+            username.clear();
+            gameToSubId.clear();
+            receiptActions.clear();
+            game_events.clear();
+
+            std::cout << "LoginOut successful" << std::endl;
+        }
+        else
+        {
+            std::vector<std::string> subsId = split_lines(getAction, ':');
+            std::string action = subsId.at(0);
+            std::string des = subsId.at(1);
+            if (action == "join")
+            { // join the game
+                gameToSubId[des] = toInt(subsId.at(2));
+                std::cout << "Joined channel " << des << std::endl;
+            }
+            else
+            { // exit
+
+                gameToSubId.erase(des);
+                receiptActions.erase(receipt);
+            }
+        }
+    }
+    else if (received == "MESSAGE")
+    {
+        //         MESSAGE - vec.at(0)
+        // subscription:78 - vec.at(1)
+        // message-id:20 - vec.at(2)
+        // destination:/a vec.at(3)
+
+        // Hello Topic a
+
+        std::string game = split_lines(vec.at(3), '/').back();
+        int index = frame.find("\n\n");
+        Event game_event(frame.substr(index + 2));
+        std::unordered_map<std::string, std::vector<Event>> map;
+        std::string user_name = split_lines(vec.at(4), ':').back();
+        std::lock_guard<std::mutex> wr_lock(m);
+        game_events[game][user_name].push_back(game_event);
+    }
+    else
+    { // ERROR
+        // split the meassage
+        std::string msg = split_lines(vec.at(1), ':').at(1);
+        if (msg == "Wrong passcode")
+        {
+            std::cout << "Wrong password" << std::endl;
+            return;
+        }
+        if (msg == "Already Connected")
+        {
+            std::cout << "User already logged in " << std::endl;
+            return;
+        }
+    }
+}
+
+// keyboard
+std::vector<std::string> StompProtocol::handleKeyboardLine(const std::string &line)
+{
+    std::vector<std::string> res;
+    std::string frame;
+    std::vector<std::string> vec = split_lines(line, ' ');
+    std::string todo = vec.at(0); // need to define a lowercase method, to convert
+    if (todo == "login")
+    {
+        if (loggedIn == true)
+        {
+            std::cout << "The client is already logged in, log out before trying again" << std::endl;
+            return res;
+        }
+
+        frame = buildConnectFrame(vec);
+        res.push_back(frame);
+        return res;
+    }
+    if (loggedIn)
+    {
+        if (todo == "join")
+        {
+            frame = buildSubscribeFrame(vec.at(1));
+            res.push_back(frame);
+        }
+        else if (todo == "exit")
+        {
+            frame = buildUnsubscribeFrame(vec.at(1));
+            res.push_back(frame);
+        }
+        else if (todo == "logout")
+        {
+
+            frame = buildDisconnectFrame(NextReceiptId++);
+            res.push_back(frame);
+        }
+        else if (todo == "report")
+        {
+
+            std::string event_path = vec.at(1);
+            names_and_events parse = parseEventsFile(event_path);
+            for (Event &ev : parse.events)
+            {
+                std::string event = ev.event_to_json(); // the message should be as json
+                std::string frame = "SEND\n";
+                std::string team_a = parse.team_a_name;
+                std::string team_b = parse.team_b_name;
+
+                frame += ("destination:/" + (team_a + "_" + team_b) + "\n\n");
+                frame += ("user:" + username + "\n");
+                frame += event;
+
+                res.push_back(frame);
+            }
+        }
+        else
+        {
+            // summary
+            summary_into_file(vec.at(1), vec.at(2), vec.at(3));
+        }
+    }
+    else
+    {
+        printf("The client should be log in\n");
+        return res;
+    }
+
+    return res;
+}
+
+std::string StompProtocol::buildConnectFrame(const std::vector<std::string> &vec)
+{
+
+    std::vector<std::string> getHostAndPort = split_lines(vec.at(1), ':');
+    host = getHostAndPort.at(0);
+    // get port num
+
+    port = toInt(getHostAndPort.at(1));
+    username = vec.at(2);
+    std::string res = "CONNECT\n";
+    res += "accept-version:1.2\n";
+    res += "host:stomp.cs.bgu.ac.il\n";
+    res += ("login:" + vec.at(2) + "\n");
+    res += ("passcode:" + vec.at(3) + "\n\n");
+    return res;
+}
+
+std::string StompProtocol::buildSubscribeFrame(std::string &destination)
+{
+    if (gameToSubId.count(destination) > 0)
+    {
+        printf("you joined this game before!");
+        return {};
+    }
+    std::string res = "SUBSCRIBE\n";
+    res += ("destination:/" + destination);
+    res += ("\nid:" + std::to_string(NextSubId));
+    res += ("\nreceipt:" + std::to_string(NextReceiptId) + "\n\n");
+    std::cout << "send subbbb" << std::endl;
+    receiptActions[NextReceiptId] = "join:" + destination + ":" + std::to_string(NextSubId);
+    ++NextSubId;
+    ++NextReceiptId;
+
+    return res;
+}
+
+std::string StompProtocol::buildUnsubscribeFrame(const std::string &game)
+{
+    if (gameToSubId.count(game) == 0)
+    {
+        printf("you didnt joined this game before!");
+        return {};
+    }
+    int id = gameToSubId[game];
+
+    std::string res = "UNSUBSCRIBE\n";
+    res += ("id:" + std::to_string(id) + "\n");
+    res += ("receipt:" + std::to_string(NextReceiptId) + "\n\n");
+    receiptActions[NextReceiptId] = "exit:" + game;
+    ++NextReceiptId;
+
+    return res;
+}
+
+std::string StompProtocol::buildDisconnectFrame(int receipt)
+{
+    std::string res = "DISCONNECT\n";
+
+    res += ("receipt:" + std::to_string(receipt) + "\n\n");
+    receiptActions[receipt] = "logout";
+
+    return res;
+}
+
+void StompProtocol::summary_into_file(std::string &game, std::string &user, std::string &file_name)
+{
+    std::lock_guard<std::mutex> re_lock(m);
+
+    std::string name = file_name + ".txt";
+    std::ofstream out_file(name);
+    if (!out_file.is_open())
+    {
+        std::cerr << "can not open file" << std::endl;
+        out_file.close();
+        return;
+    }
+    if (game_events.count(game) == 0)
+    {
+        std::cerr << "game not found" << std::endl;
+        out_file.close();
+        return;
+    }
+    if (game_events[game].count(user) == 0)
+    {
+        std::cerr << "user not found for this event" << std::endl;
+        out_file.close();
+        return;
+    }
+    std::map<std::string, std::string> all_general_states;
+    std::map<std::string, std::string> all_team_a_states;
+    std::map<std::string, std::string> all_team_b_states;
+    std::vector<Event> events = game_events[game][user];
+    for (const auto &curr : events)
+    {
+        for (auto &up : curr.get_game_updates())
+        {
+            all_general_states[up.first] = up.second;
+        }
+
+        for (auto &up : curr.get_team_a_updates())
+        {
+            all_team_a_states[up.first] = up.second;
+        }
+        for (auto &up : curr.get_team_b_updates())
+        {
+            all_team_b_states[up.first] = up.second;
+        }
+    }
+
+    std::string name_a = events.back().get_team_a_name();
+    std::string name_b = events.back().get_team_b_name();
+
+    std::string res = (name_a + " vs " + name_b + "\n");
+    res += "Game stats:\n";
+    res += "General stats:\n";
+    for (auto st : all_general_states)
+    {
+        res += (st.first + ":" + st.second + "\n");
+    }
+    res += "\n";
+    res += (name_a + " stats:\n");
+    for (auto st : all_team_a_states)
+    {
+        res += (st.first + ":" + st.second + "\n");
+    }
+    res += "\n";
+    res += (name_b + " stats:\n");
+    for (auto st : all_team_b_states)
+    {
+        res += (st.first + ":" + st.second + "\n");
+    }
+
+    res += "\n\n";
+    res += "Game event reports:\n";
+    for (auto up : events)
+    {
+        //         Game event reports:
+        // <game_event_time1>- <game_event_name1>:
+        // <game_event_description1>
+        // <game_event_time2>- <game_event_name2>:
+        // <game_event_description2
+        res += (std::to_string(up.get_time()) + "-" + up.get_name() + ":\n");
+        res += (up.get_discription() + "\n\n");
+    }
+    out_file << res;
+
+    out_file.close();
+}
+
+// split
+std::vector<std::string> StompProtocol::split_lines(const std::string &frame, char spCh) const
+{
+    std::vector<std::string> result;
+    std::string add;
+    for (char c : frame)
+    {
+
+        if (c != spCh)
+        {
+            add.push_back(c);
+        }
+        else
+        {
+            result.push_back(add);
+            add.clear();
+        }
+    }
+    if (!add.empty())
+    {
+        result.push_back(add);
+        add.clear();
+    }
+
+    return result;
+}
+bool StompProtocol::shouldStop()
+{
+
+    return stop.load();
+}
+// string to int
+int StompProtocol::toInt(const std::string st)
+{
+    int num = 0;
+    for (char c : st)
+    {
+        num = num * 10 + (c - '0');
+    }
+    return num;
+}
