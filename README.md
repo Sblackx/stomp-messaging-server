@@ -6,7 +6,7 @@ A high-performance, asynchronous Multi-Threaded Messaging Server implementing th
 This repository represents a collaborative distributed systems project developed as a team of two software engineering/computer science students at Ben-Gurion University. Tasks were strictly divided between core network infrastructure execution and protocol/client event architecture.
 
 * **Sabreen Abo Saheban** (Core Server STOMP Protocol Engine, C++ Client Network Events, JSON Parsing, Integration Testing & Code Verification)
-* **[Rasan Abo Kaf]** (Server Concurrency Layer, Thread-Safety, & Locking Mechanics)
+* **Team member: Rasan Abo Kaf** (Server Concurrency Layer, Thread-Safety, & Locking Mechanics)
 
 ### Detailed Breakdown of My Personal Work (Sabreen Abo Saheban)
 
