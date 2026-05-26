@@ -21,3 +21,11 @@ This repository represents a collaborative distributed systems project developed
 #### 3. Integration, Verification & System-Wide Testing
 * **Cross-Layer Integration Testing:** Acted as the primary integration tester for the project. Merged the concurrent server execution layer (developed by the team member) with the protocol engine and the native C++ client to ensure flawless end-to-end subsystem communication.
 * **Code Verification & Debugging:** Conducted rigorous testing and manual code reviews on the shared state mechanics to verify that the locking primitives and thread-safe collections behaved properly under high-concurrency simulation loads, isolating protocol bugs before final deployment.
+
+## System Design Constraints & Known Limitations
+
+During the system integration and verification phase, the following architectural design constraint was isolated and documented:
+
+* **Static Client-Server Binding (Single-User Session Limitation):** The connection handshake and session lifecycle between the C++ client and the Java server operate on a rigid, static implementation. The system is designed to accept and process a single user/client instance strictly once per execution cycle.
+* **The Boundary Behavior:** If the connected user disconnects or a secondary user attempts to establish a concurrent or subsequent session, the server-client binding remains statically locked to the initial instance, requiring a manual process restart to clear the network sockets and re-initialize the state.
+* **Engineering Trade-off:** This rigid behavior was kept as a project baseline constraint due to tight academic semester deadlines, shifting development focus entirely toward verifying core frame parsing correctness and basic protocol compliance rather than building a dynamically scalable multi-session lifecycle manager.
