@@ -11,6 +11,7 @@ StompProtocol::StompProtocol() : stop(false), IsConnected(false), loggedIn(false
 // server
 void StompProtocol::handleServerFrame(const std::string &frame)
 {
+    // std::cout << "DEBUG: received frame type: " << frame << std::endl;
     std::vector<std::string> vec = split_lines(frame, '\n');
     // for (std::string st : vec)
     // { //to debug
@@ -18,7 +19,14 @@ void StompProtocol::handleServerFrame(const std::string &frame)
     // }
     if (vec.empty())
         return;
-    std::string received = vec.at(0);
+    int start = 0;
+    while (start < vec.size() && vec.at(start).empty())
+        start++;
+
+    if (start >= vec.size())
+        return;
+
+    std::string received = vec.at(start);
     if (received == "CONNECTED")
     {
         std::cout << "Login successful" << std::endl;
@@ -27,7 +35,7 @@ void StompProtocol::handleServerFrame(const std::string &frame)
     }
     else if (received == "RECEIPT")
     {
-        std::vector<std::string> recId = split_lines(vec.at(1), ':');
+        std::vector<std::string> recId = split_lines(vec.at(start + 1), ':');
         int receipt = toInt(recId.at(1));
         std::string getAction = receiptActions[receipt]; // get the action by receipt id
         if (getAction == "logout")
@@ -66,13 +74,17 @@ void StompProtocol::handleServerFrame(const std::string &frame)
     }
     else if (received == "MESSAGE")
     {
-        std::string game = split_lines(vec.at(3), '/').back();
+        std::cout << "DEBUG: received MESSAGE frame" << std::endl;
+        std::string game = split_lines(vec.at(start + 3), '/').back();
+        std::transform(game.begin(), game.end(), game.begin(), ::tolower);
+
         int index = frame.find("\n\n");
         std::string body = frame.substr(index + 2);
 
         // user is the FIRST line of the body: "user: meni"
         std::string first_line = body.substr(0, body.find('\n'));
         std::string user_name = split_lines(first_line, ' ').back(); // "user: meni" -> "meni"
+        std::cout << "DEBUG: game='" << game << "' user='" << user_name << "'" << std::endl;
 
         Event game_event(body);
         std::lock_guard<std::mutex> wr_lock(m);
@@ -81,7 +93,7 @@ void StompProtocol::handleServerFrame(const std::string &frame)
     else
     { // ERROR
         // split the meassage
-        std::string msg = split_lines(vec.at(1), ':').at(1);
+        std::string msg = split_lines(vec.at(start + 1), ':').at(1);
         if (msg == "Wrong passcode")
         {
             std::cout << "Wrong password" << std::endl;
@@ -134,6 +146,7 @@ std::vector<std::string> StompProtocol::handleKeyboardLine(const std::string &li
         }
         else if (todo == "report")
         {
+            std::cout << "DEBUG: report called once" << std::endl;
 
             std::string event_path = vec.at(1);
             names_and_events parse = parseEventsFile(event_path);
@@ -182,7 +195,7 @@ std::vector<std::string> StompProtocol::handleKeyboardLine(const std::string &li
                 // for (int i = std::max(0, (int)frame.size() - 20); i < frame.size(); i++)
                 //     printf("%02x ", (unsigned char)frame[i]);
                 // std::cout << std::endl;
-                
+
                 res.push_back(frame);
             }
         }
@@ -267,29 +280,30 @@ std::string StompProtocol::buildDisconnectFrame(int receipt)
 
 void StompProtocol::summary_into_file(std::string &game, std::string &user, std::string &file_name)
 {
-    std::vector<Event> events = game_events[game][user];
+    std::string game_lower = game;
+    std::transform(game_lower.begin(), game_lower.end(), game_lower.begin(), ::tolower);
+
+    std::lock_guard<std::mutex> re_lock(m);
+    if (game_events.count(game_lower) == 0)
+    {
+        std::cerr << "game not found." << std::endl;
+        return;
+    }
+    if (game_events[game_lower].count(user) == 0)
+    {
+        std::cerr << "user not found for this event." << std::endl;
+        return;
+    }
+    std::vector<Event> events = game_events[game_lower][user];
     std::sort(events.begin(), events.end(),
               [](const Event &a, const Event &b)
               { return a.get_time() < b.get_time(); });
-    std::lock_guard<std::mutex> re_lock(m);
 
     std::string name = file_name + ".txt";
     std::ofstream out_file(name);
     if (!out_file.is_open())
     {
         std::cerr << "can not open file" << std::endl;
-        out_file.close();
-        return;
-    }
-    if (game_events.count(game) == 0)
-    {
-        std::cerr << "game not found" << std::endl;
-        out_file.close();
-        return;
-    }
-    if (game_events[game].count(user) == 0)
-    {
-        std::cerr << "user not found for this event" << std::endl;
         out_file.close();
         return;
     }
