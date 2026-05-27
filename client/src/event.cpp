@@ -62,69 +62,6 @@ const std::string &Event::get_discription() const
     return this->description;
 }
 
-// std::string Event::event_to_string() const
-// { // i thought this will be send, but it must be a json format str
-//     // team a: usa
-//     // team b: canada
-//     // event name: kickoff
-//     // time: 0
-//     // general game updates:
-//     // active: true
-//     // before halftime: true
-//     // team a updates:
-//     // team b updates:
-//     // description:
-//     // The game has started! What an exciting evening!
-//     //     <team_a_name> vs <team_b_name>
-//     // Game stats:
-//     // General stats:
-//     // <stat_name1 >: <stat_val1>
-//     // <stat_name2 >: <stat_val2>
-//     // ...
-//     // <team_a_name> stats:
-//     // <stat_name1 >: <stat_val1>
-//     // <stat_name2 >: <stat_val2>
-//     // ...
-//     // <team_b_name> stats:
-//     // <stat_name1 >: <stat_val1>
-//     // <stat_name2 >: <stat_val2>
-//     // ...
-//     // Game event reports:
-//     // <game_event_time1>- <game_event_name1>:
-//     // <game_event_description1>
-//     // <game_event_time2>- <game_event_name2>:
-//     // <game_event_description2>
-//     std::string name_a = get_team_a_name();
-//     std::string name_b = get_team_b_name();
-
-//     std::string res = (name_a + " vs " + name_b + "\n");
-//     res += "Game stats:\n";
-//     res += "General stats:\n";
-//     for (auto &up : get_game_updates())
-//     {
-//         res += (up.first + ": " + up.second + "\n");
-//     }
-//     // res += ("team b: " + get_team_b_name() + "\n");
-//     // res += ("event name: " + get_name() + "\n");
-//     // res += ("general game updates:\n");
-
-//     res += (name_a + " stats:\n");
-//     for (auto &up : get_team_a_updates())
-//     {
-//         res += (up.first + ": " + up.second + "\n");
-//     }
-//     res += (name_b + " stats:\n");
-//     for (auto &up : get_team_b_updates())
-//     {
-//         res += (up.first + ": " + up.second + "\n");
-//     }
-//     res += ("time: " + std::to_string(get_time()) + "-" + get_name() + "\n");
-
-//     res += "description:\n";
-//     res += get_discription();
-
-//     return res;
-// }
 std::string Event::event_to_json() const
 {
 
@@ -141,41 +78,76 @@ std::string Event::event_to_json() const
 
     return js.dump();
 }
-Event::Event(const std::string &frame_body) : team_a_name(""), team_b_name(""), name(""), time(0), game_updates(), team_a_updates(), team_b_updates(), description("")
-{ // parse a json body
-    json get_data = json::parse(frame_body);
-    team_a_name = get_data["team a"];
-    team_b_name = get_data["team b"];
-    name = get_data["event name"];
-    time = get_data["time"];
-    description = get_data["description"];
-    // iterate over the updates
-    for (auto &game_up : get_data["general game updates"].items())
+Event::Event(const std::string &frame_body)
+    : team_a_name(""), team_b_name(""), name(""), time(0),
+      game_updates(), team_a_updates(), team_b_updates(), description("")
+{
+    // Parse the spec's plain-text wire format line by line
+    std::istringstream ss(frame_body);
+    std::string line;
+    // 0=general, 1=team_a, 2=team_b, 3=description
+    int section = -1;
+
+    while (std::getline(ss, line))
     {
-        std::string up;
-        if (game_up.value().is_string())
-            up = game_up.value();
-        else
-            up = game_up.value().dump();
-        game_updates[game_up.key()] = up;
-    }
-    for (auto &game_up : get_data["team a updates"].items())
-    {
-        std::string up;
-        if (game_up.value().is_string())
-            up = game_up.value();
-        else
-            up = game_up.value().dump();
-        team_a_updates[game_up.key()] = up;
-    }
-    for (auto &game_up : get_data["team b updates"].items())
-    {
-        std::string up;
-        if (game_up.value().is_string())
-            up = game_up.value();
-        else
-            up = game_up.value().dump();
-        team_b_updates[game_up.key()] = up;
+        if (line.empty())
+            continue;
+
+        if (line.rfind("team a: ", 0) == 0)
+        {
+            team_a_name = line.substr(8);
+            continue;
+        }
+        if (line.rfind("team b: ", 0) == 0)
+        {
+            team_b_name = line.substr(8);
+            continue;
+        }
+        if (line.rfind("event name: ", 0) == 0)
+        {
+            name = line.substr(12);
+            continue;
+        }
+        if (line.rfind("time: ", 0) == 0)
+        {
+            time = std::stoi(line.substr(6));
+            continue;
+        }
+        if (line == "general game updates:")
+        {
+            section = 0;
+            continue;
+        }
+        if (line == "team a updates:")
+        {
+            section = 1;
+            continue;
+        }
+        if (line == "team b updates:")
+        {
+            section = 2;
+            continue;
+        }
+        if (line.rfind("description: ", 0) == 0)
+        {
+            description = line.substr(13);
+            section = 3;
+            continue;
+        }
+
+        // key: value lines inside sections
+        size_t colon = line.find(": ");
+        if (colon != std::string::npos)
+        {
+            std::string key = line.substr(0, colon);
+            std::string val = line.substr(colon + 2);
+            if (section == 0)
+                game_updates[key] = val;
+            else if (section == 1)
+                team_a_updates[key] = val;
+            else if (section == 2)
+                team_b_updates[key] = val;
+        }
     }
 }
 
