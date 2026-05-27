@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include "event.h"
 #include <vector>
+#include <atomic> //adding this
 
 // TODO: implement the STOMP protocol
 class StompProtocol
