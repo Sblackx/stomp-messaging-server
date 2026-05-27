@@ -66,18 +66,15 @@ void StompProtocol::handleServerFrame(const std::string &frame)
     }
     else if (received == "MESSAGE")
     {
-        //         MESSAGE - vec.at(0)
-        // subscription:78 - vec.at(1)
-        // message-id:20 - vec.at(2)
-        // destination:/a vec.at(3)
-
-        // Hello Topic a
-
         std::string game = split_lines(vec.at(3), '/').back();
         int index = frame.find("\n\n");
-        Event game_event(frame.substr(index + 2));
-        std::unordered_map<std::string, std::vector<Event>> map;
-        std::string user_name = split_lines(vec.at(4), ':').back();
+        std::string body = frame.substr(index + 2);
+
+        // user is the FIRST line of the body: "user: meni"
+        std::string first_line = body.substr(0, body.find('\n'));
+        std::string user_name = split_lines(first_line, ' ').back(); // "user: meni" -> "meni"
+
+        Event game_event(body);
         std::lock_guard<std::mutex> wr_lock(m);
         game_events[game][user_name].push_back(game_event);
     }
@@ -140,17 +137,52 @@ std::vector<std::string> StompProtocol::handleKeyboardLine(const std::string &li
 
             std::string event_path = vec.at(1);
             names_and_events parse = parseEventsFile(event_path);
+            std::string game_key = parse.team_a_name + "_" + parse.team_b_name;
+
+            std::transform(game_key.begin(), game_key.end(), game_key.begin(), ::tolower);
+
+            std::sort(parse.events.begin(), parse.events.end(),
+                      [](const Event &a, const Event &b)
+                      { return a.get_time() < b.get_time(); });
+
             for (Event &ev : parse.events)
             {
+
+                {
+                    std::lock_guard<std::mutex> wr_lock(m);
+                    game_events[game_key][username].push_back(ev);
+                }
+
                 std::string event = ev.event_to_json(); // the message should be as json
                 std::string frame = "SEND\n";
-                std::string team_a = parse.team_a_name;
-                std::string team_b = parse.team_b_name;
+                frame += ("destination:/" + game_key + "\n");
+                frame += "\n";
+                frame += ("user: " + username + "\n");
+                frame += ("team a: " + parse.team_a_name + "\n");
+                frame += ("team b: " + parse.team_b_name + "\n");
+                frame += ("event name: " + ev.get_name() + "\n");
+                frame += ("time: " + std::to_string(ev.get_time()) + "\n");
+                frame += "general game updates:\n";
+                for (auto &up : ev.get_game_updates())
+                    frame += (up.first + ": " + up.second + "\n");
+                frame += "team a updates:\n";
+                for (auto &up : ev.get_team_a_updates())
+                    frame += (up.first + ": " + up.second + "\n");
+                frame += "team b updates:\n";
+                for (auto &up : ev.get_team_b_updates())
+                    frame += (up.first + ": " + up.second + "\n");
+                frame += ("description: " + ev.get_discription() + "\n");
 
-                frame += ("destination:/" + (team_a + "_" + team_b) + "\n\n");
-                frame += ("user:" + username + "\n");
-                frame += event;
+                // debug
+                //  std::cout << "=== SENDING FRAME ===\n"
+                //            << frame << "\n=== END FRAME ===" << std::endl;
 
+                // std::cout << "Frame length: " << frame.size() << std::endl;
+                // std::cout << "Last 20 chars hex: ";
+                // for (int i = std::max(0, (int)frame.size() - 20); i < frame.size(); i++)
+                //     printf("%02x ", (unsigned char)frame[i]);
+                // std::cout << std::endl;
+                
                 res.push_back(frame);
             }
         }
@@ -197,7 +229,7 @@ std::string StompProtocol::buildSubscribeFrame(std::string &destination)
     res += ("destination:/" + destination);
     res += ("\nid:" + std::to_string(NextSubId));
     res += ("\nreceipt:" + std::to_string(NextReceiptId) + "\n\n");
-    std::cout << "send subbbb" << std::endl;
+    // std::cout << "send subbbb" << std::endl;
     receiptActions[NextReceiptId] = "join:" + destination + ":" + std::to_string(NextSubId);
     ++NextSubId;
     ++NextReceiptId;
@@ -235,6 +267,10 @@ std::string StompProtocol::buildDisconnectFrame(int receipt)
 
 void StompProtocol::summary_into_file(std::string &game, std::string &user, std::string &file_name)
 {
+    std::vector<Event> events = game_events[game][user];
+    std::sort(events.begin(), events.end(),
+              [](const Event &a, const Event &b)
+              { return a.get_time() < b.get_time(); });
     std::lock_guard<std::mutex> re_lock(m);
 
     std::string name = file_name + ".txt";
@@ -260,7 +296,6 @@ void StompProtocol::summary_into_file(std::string &game, std::string &user, std:
     std::map<std::string, std::string> all_general_states;
     std::map<std::string, std::string> all_team_a_states;
     std::map<std::string, std::string> all_team_b_states;
-    std::vector<Event> events = game_events[game][user];
     for (const auto &curr : events)
     {
         for (auto &up : curr.get_game_updates())
