@@ -1,5 +1,6 @@
 # stomp-messaging-server
 A high-performance, asynchronous Multi-Threaded Messaging Server implementing the STOMP protocol. Features a Java-based Reactor/TPC backend architecture paired with a native, concurrent C++ client. Developed as part of the Systems Programming course at BGU.
+For current time the codes have a few bug I am currently fix it alone, because it's really bad to let program like this have a bug 🐛!
 
 ## Development Team & Project Contributions
 
