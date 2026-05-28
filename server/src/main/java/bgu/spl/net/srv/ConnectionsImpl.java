@@ -66,7 +66,7 @@ public class ConnectionsImpl<T> implements Connections<T> {
             if (!clientConnectionHand.containsKey(connectionId))
                 return -1;
             ConcurrentHashMap<Integer, String> map = connectionSubs.get(connectionId);
-            
+
             if (map.get(subId) == null || !map.containsKey(subId))
                 return -2;// unsuccessful unsubscribe
             // O(n)->O(1) improved
@@ -99,11 +99,11 @@ public class ConnectionsImpl<T> implements Connections<T> {
 
     public int connectUser(int connectionId, String name, String pass) {
         LoginStatus state = UserDataBase.login(connectionId, name, pass);
-        if (state == LoginStatus.WRONG_PASSWORD){
+        if (state == LoginStatus.WRONG_PASSWORD) {
             System.out.println("wrong pass");
             return -1;
         }
-            
+
         else if (state == LoginStatus.ALREADY_LOGGED_IN)
             return -2;
         else {
@@ -155,16 +155,9 @@ public class ConnectionsImpl<T> implements Connections<T> {
             StringBuilder reply = new StringBuilder();
 
             reply.append("MESSAGE\n").append("subscription:" + subId + "\n")
-                    .append("message-id:" + counter.get() + "\n")
+                    .append("message-id:" + counter.getAndIncrement() + "\n")
                     .append("destination:" + channel + "\n").append(msg).append('\u0000').append("\n");
             send(connId, (T) (reply.toString()));
-            writeLock();
-            try {
-                counter.getAndIncrement();
-
-            } finally {
-                writeUnlock();
-            }
 
         }
 
@@ -175,6 +168,8 @@ public class ConnectionsImpl<T> implements Connections<T> {
         // 1. remove from clientConnectionHand4
         writeLock();
         try {
+            UserDataBase.logout(connectionId);
+
             clientConnectionHand.remove(connectionId);
             // 2.remove from the channels
             Set<String> channelsToRemove = conn2channels.get(connectionId);
@@ -196,7 +191,8 @@ public class ConnectionsImpl<T> implements Connections<T> {
 
             conn2channels.remove(connectionId);
             connectionSubs.remove(connectionId);
-            UserDataBase.logout(connectionId);
+            if (clientConnectionHand.containsKey(connectionId))
+                clientConnectionHand.remove(connectionId);
 
         } finally {
             writeUnlock();
@@ -204,7 +200,7 @@ public class ConnectionsImpl<T> implements Connections<T> {
 
     }
 
-    // from assignment 2
+
     private void writeLock() {
         // TODO: acquire write lock
         lock.writeLock().lock();
