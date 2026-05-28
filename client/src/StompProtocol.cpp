@@ -11,12 +11,8 @@ StompProtocol::StompProtocol() : stop(false), IsConnected(false), loggedIn(false
 // server
 void StompProtocol::handleServerFrame(const std::string &frame)
 {
-    // std::cout << "DEBUG: received frame type: " << frame << std::endl;
     std::vector<std::string> vec = split_lines(frame, '\n');
-    // for (std::string st : vec)
-    // { //to debug
-    //     std::cout << st << std::endl;
-    // }
+    
     if (vec.empty())
         return;
     int start = 0;
@@ -74,19 +70,37 @@ void StompProtocol::handleServerFrame(const std::string &frame)
     }
     else if (received == "MESSAGE")
     {
-        std::cout << "DEBUG: received MESSAGE frame" << std::endl;
         std::string game = split_lines(vec.at(start + 3), '/').back();
         std::transform(game.begin(), game.end(), game.begin(), ::tolower);
+        std::string user_line = vec.at(start + 4);
+        std::string user_name = user_line.substr(6);
 
-        int index = frame.find("\n\n");
+        size_t dest_pos = frame.find("destination:");
+        size_t index = frame.find("\n\n", dest_pos);
         std::string body = frame.substr(index + 2);
 
-        // user is the FIRST line of the body: "user: meni"
-        std::string first_line = body.substr(0, body.find('\n'));
-        std::string user_name = split_lines(first_line, ' ').back(); // "user: meni" -> "meni"
-        std::cout << "DEBUG: game='" << game << "' user='" << user_name << "'" << std::endl;
-
+        
         Event game_event(body);
+
+        std::cout << "\n======================Game updates======================\n"
+                  << std::endl;
+        std::cout << "New report from " << user_name << " on " << game << ":\n";
+        std::cout << "event name: " << game_event.get_name() << "\n";
+        std::cout << "time: " << game_event.get_time() << "\n";
+        std::cout << "general game updates:\n";
+        for (auto &up : game_event.get_game_updates())
+            std::cout << up.first << ": " << up.second << "\n";
+        std::cout << "team a updates:\n";
+        for (auto &up : game_event.get_team_a_updates())
+            std::cout << up.first << ": " << up.second << "\n";
+        std::cout << "team b updates:\n";
+        for (auto &up : game_event.get_team_b_updates())
+            std::cout << up.first << ": " << up.second << "\n";
+        std::cout << "description: " << game_event.get_discription() << "\n"
+                  << std::endl;
+        std::cout << "\n============================================\n"
+                  << std::endl;
+
         std::lock_guard<std::mutex> wr_lock(m);
         game_events[game][user_name].push_back(game_event);
     }
@@ -146,8 +160,7 @@ std::vector<std::string> StompProtocol::handleKeyboardLine(const std::string &li
         }
         else if (todo == "report")
         {
-            std::cout << "DEBUG: report called once" << std::endl;
-
+           
             std::string event_path = vec.at(1);
             names_and_events parse = parseEventsFile(event_path);
             std::string game_key = parse.team_a_name + "_" + parse.team_b_name;
@@ -166,7 +179,7 @@ std::vector<std::string> StompProtocol::handleKeyboardLine(const std::string &li
                     game_events[game_key][username].push_back(ev);
                 }
 
-                std::string event = ev.event_to_json(); // the message should be as json
+               
                 std::string frame = "SEND\n";
                 frame += ("destination:/" + game_key + "\n");
                 frame += "\n";
@@ -186,15 +199,6 @@ std::vector<std::string> StompProtocol::handleKeyboardLine(const std::string &li
                     frame += (up.first + ": " + up.second + "\n");
                 frame += ("description: " + ev.get_discription() + "\n");
 
-                // debug
-                //  std::cout << "=== SENDING FRAME ===\n"
-                //            << frame << "\n=== END FRAME ===" << std::endl;
-
-                // std::cout << "Frame length: " << frame.size() << std::endl;
-                // std::cout << "Last 20 chars hex: ";
-                // for (int i = std::max(0, (int)frame.size() - 20); i < frame.size(); i++)
-                //     printf("%02x ", (unsigned char)frame[i]);
-                // std::cout << std::endl;
 
                 res.push_back(frame);
             }
@@ -242,7 +246,6 @@ std::string StompProtocol::buildSubscribeFrame(std::string &destination)
     res += ("destination:/" + destination);
     res += ("\nid:" + std::to_string(NextSubId));
     res += ("\nreceipt:" + std::to_string(NextReceiptId) + "\n\n");
-    // std::cout << "send subbbb" << std::endl;
     receiptActions[NextReceiptId] = "join:" + destination + ":" + std::to_string(NextSubId);
     ++NextSubId;
     ++NextReceiptId;
@@ -354,11 +357,6 @@ void StompProtocol::summary_into_file(std::string &game, std::string &user, std:
     res += "Game event reports:\n";
     for (auto up : events)
     {
-        //         Game event reports:
-        // <game_event_time1>- <game_event_name1>:
-        // <game_event_description1>
-        // <game_event_time2>- <game_event_name2>:
-        // <game_event_description2
         res += (std::to_string(up.get_time()) + "-" + up.get_name() + ":\n");
         res += (up.get_discription() + "\n\n");
     }
@@ -398,13 +396,29 @@ bool StompProtocol::shouldStop()
 
     return stop.load();
 }
+void StompProtocol::resetStop()
+{
+    stop = false;
+}
+// reset all after logout
+void StompProtocol::resetSession()
+{
+    stop = false;
+    loggedIn = false;
+    IsConnected = false;
+
+    NextSubId = 1;
+    NextReceiptId = 1;
+
+    username.clear();
+    gameToSubId.clear();
+    receiptActions.clear();
+
+    //remove it so other users can call summary even if the user called report before is logged out now
+    // game_events.clear(); 
+}
 // string to int
 int StompProtocol::toInt(const std::string st)
 {
-    int num = 0;
-    for (char c : st)
-    {
-        num = num * 10 + (c - '0');
-    }
-    return num;
+    return std::stoi(st);
 }
