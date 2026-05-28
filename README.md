@@ -1,6 +1,5 @@
 # stomp-messaging-server
 A high-performance, asynchronous Multi-Threaded Messaging Server implementing the STOMP protocol. Features a Java-based Reactor/TPC backend architecture paired with a native, concurrent C++ client. Developed as part of the Systems Programming course at BGU.
-For current time the codes have a few bug I am currently fix it alone, because it's really bad to let program like this have a bug 🐛!
 
 ## Development Team & Project Contributions
 
@@ -39,7 +38,7 @@ The performance, thread-safety, and message-routing integrity of this distribute
 * **State Atomicity Auditing:** As part of the integration testing lifecycle, these data structures were verified under simulated connection sequences to guarantee that protocol commands (`SUBSCRIBE` / `UNSUBSCRIBE`) cleanly trigger atomic memory updates without resulting in state corruption.
 * **Static Session Lifecycle Identification:** Through rigorous integration testing, a structural design boundary was isolated: these storage maps operate on a rigid, static lifecycle scope that permanently binds the initial client connection context, highlighting the lack of a dynamic eviction/cleanup policy after a session terminates.
 
-## System Design Constraints & Known Limitations
+## System Design Constraints & Known Limitations -> That I fix it,
 
 Full Protocol handshake (Login, Join, Report, Logout).
 
@@ -49,8 +48,8 @@ Memory and Channel isolation between different users.
 
 Known Limitations (The Broken Pipe Case):
 
-Issue: Intermittent Broken pipe error during rapid sequential Login -> Logout -> Login cycles.
+Issue: Intermittent Broken pipe error during rapid sequential Login -> Logout -> Login cycles -> FIXED!
 
-Technical Cause: Incomplete Socket teardown/re-initialization in the client-side lifecycle management upon re-connection.
+Technical Cause: Incomplete Socket teardown/re-initialization in the client-side lifecycle management upon re-connection. -> FIXED
 
-Conclusion: The current system handles single-session lifecycle perfectly, and this is a known architectural bottleneck identified for future refinement.
+Conclusion: The current system handles single-session lifecycle perfectly, and this is a known architectural bottleneck identified for future refinement -> **ALL FIXED, By adding new algorithm to resconnect from the client side.**
