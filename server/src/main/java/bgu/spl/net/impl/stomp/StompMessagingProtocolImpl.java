@@ -229,7 +229,8 @@ public class StompMessagingProtocolImpl<T> implements StompMessagingProtocol<T> 
                             + '\u0000';
                     conn.send(connectionId, (T) reply);
                     disconnect();
-                    return;
+                    this.shouldEnd = true;
+                    break;
 
                 }
 
