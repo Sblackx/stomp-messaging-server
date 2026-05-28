@@ -73,8 +73,8 @@ make
 
 **Running The DataBase**
 ```bash
-# cd data
-then
+cd data
+#then
 python3 sql_server.py
 
 ``` 
@@ -82,8 +82,8 @@ python3 sql_server.py
 **Running the Server:**
 
 ```bash
-# cd server
-then choose
+cd server
+#then choose TPC or Reactor
 # TPC Model
 mvn exec:java -Dexec.mainClass="bgu.spl.net.impl.stomp.StompServer" -Dexec.args="<port> tpc"
 
@@ -95,7 +95,7 @@ mvn exec:java -Dexec.mainClass="bgu.spl.net.impl.stomp.StompServer" -Dexec.args=
 **Running the Client:**
 
 ```bash
-# cd client
+cd client
 ./bin/StompWCIClient
 
 ```
