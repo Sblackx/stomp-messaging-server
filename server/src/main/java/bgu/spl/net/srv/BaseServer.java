@@ -14,7 +14,7 @@ public abstract class BaseServer<T> implements Server<T> {
 
     private final int port;
     // Refactoring Messaging Protocol
-    //private final Supplier<MessagingProtocol<T>> protocolFactory;
+    // private final Supplier<MessagingProtocol<T>> protocolFactory;
     private final Supplier<StompMessagingProtocol<T>> protocolFactory;
     private final Supplier<MessageEncoderDecoder<T>> encdecFactory;
     private ServerSocket sock;
@@ -25,26 +25,27 @@ public abstract class BaseServer<T> implements Server<T> {
     public BaseServer(
             int port,
             Supplier<StompMessagingProtocol<T>> protocolFactory, // Refactoring Messaging Protocol
-            Supplier<MessageEncoderDecoder<T>> encdecFactory ) {
+            Supplier<MessageEncoderDecoder<T>> encdecFactory) {
 
         this.port = port;
         this.protocolFactory = protocolFactory;
         this.encdecFactory = encdecFactory;
-		this.sock = null;   
+        this.sock = null;
     }
 
     @Override
     public void serve() {
 
         try (ServerSocket serverSock = new ServerSocket(port)) {
-			System.out.println("Server started");
+            System.out.println("Server started");
 
-            this.sock = serverSock; //just to be able to close
+            this.sock = serverSock; // just to be able to close
 
             while (!Thread.currentThread().isInterrupted()) {
 
                 Socket clientSock = serverSock.accept();
-        
+                System.out.println("SERVER: New connection accepted from " + clientSock.getRemoteSocketAddress());
+
                 StompMessagingProtocol<T> protocol = protocolFactory.get();
                 BlockingConnectionHandler<T> handler = new BlockingConnectionHandler<>(
                         clientSock,
@@ -53,9 +54,9 @@ public abstract class BaseServer<T> implements Server<T> {
 
                 // factoring Connections and Messaging Protocol
                 // generating Unique Id for Handler
-                int id = nextId.incrementAndGet();  
+                int id = nextId.incrementAndGet();
                 // connecting the client(corresponding to the handler and Id) to Connections
-                connections.connect(id, handler);  
+                connections.connect(id, handler);
                 // starting the protocol
                 protocol.start(id, connections);
                 execute(handler);
@@ -68,10 +69,10 @@ public abstract class BaseServer<T> implements Server<T> {
 
     @Override
     public void close() throws IOException {
-		if (sock != null)
-			sock.close();
+        if (sock != null)
+            sock.close();
     }
 
-    protected abstract void execute(BlockingConnectionHandler<T>  handler);
+    protected abstract void execute(BlockingConnectionHandler<T> handler);
 
 }
