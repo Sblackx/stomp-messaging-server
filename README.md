@@ -50,5 +50,72 @@ This independent, dual-layered refinement transformed the project into a robust,
 
 ---
 
+```markdown
+
+## 🚀 Getting Started
+
+### Prerequisites
+* **Java:** JDK 11+
+* **C++:** Compiler (e.g., g++) supporting C++11+
+* **Build Tools:** Maven (Server), Make (Client)
+
+### Compilation
+```bash
+# Build the Java Server
+mvn compile
+
+# Build the C++ Client
+make
+
+```
+
+### Execution
+
+**Running The DataBase**
+```bash
+# cd data
+then
+python3 sql_server.py
+
+``` 
+
+**Running the Server:**
+
+```bash
+# cd server
+then choose
+# TPC Model
+mvn exec:java -Dexec.mainClass="bgu.spl.net.impl.stomp.StompServer" -Dexec.args="<port> tpc"
+
+# Reactor Model
+mvn exec:java -Dexec.mainClass="bgu.spl.net.impl.stomp.StompServer" -Dexec.args="<port> reactor"
+
+```
+
+**Running the Client:**
+
+```bash
+# cd client
+./bin/StompWCIClient
+
+```
+
+---
+
+## ⌨️ Command Workflow
+
+Once the client is running, you can interact with the server using the following commands:
+
+| Command | Usage | Description |
+| --- | --- | --- |
+| **Login** | `login {host:port} {user} {pass}` | Authenticates session and validates credentials. |
+| **Join** | `join {game_name}` | Subscribes the user to a live game topic. |
+| **Exit** | `exit {game_name}` | Unsubscribes from a topic. |
+| **Report** | `report {file_path}` | Parses JSON event data and broadcasts to channel. |
+| **Summary** | `summary {game_name} {user} {file_path}` | Exports statistics/event history to a file. |
+| **Logout** | `logout` | Gracefully disconnects and cleans up socket buffers. |
+
+---
+
 ### 💡 Future Refinement
 Future iterations will focus on implementing a formal dynamic eviction policy for inactive sessions to further optimize long-term memory footprint.
